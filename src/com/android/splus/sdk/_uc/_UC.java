@@ -18,19 +18,28 @@ import cn.uc.gamesdk.info.PaymentInfo;
 import com.android.splus.sdk.apiinterface.IPayManager;
 import com.android.splus.sdk.apiinterface.InitBean;
 import com.android.splus.sdk.apiinterface.InitBean.InitBeanSuccess;
+import com.android.splus.sdk.apiinterface.NetHttpUtil.DataCallback;
+import com.android.splus.sdk.apiinterface.APIConstants;
+import com.android.splus.sdk.apiinterface.DateUtil;
 import com.android.splus.sdk.apiinterface.InitCallBack;
 import com.android.splus.sdk.apiinterface.LoginCallBack;
+import com.android.splus.sdk.apiinterface.LoginParser;
 import com.android.splus.sdk.apiinterface.LogoutCallBack;
+import com.android.splus.sdk.apiinterface.MD5Util;
+import com.android.splus.sdk.apiinterface.NetHttpUtil;
 import com.android.splus.sdk.apiinterface.RechargeCallBack;
+import com.android.splus.sdk.apiinterface.RequestModel;
 import com.android.splus.sdk.apiinterface.UserAccount;
 
 import org.json.JSONObject;
 
 import android.app.Activity;
+import android.app.ProgressDialog;
 import android.content.res.Configuration;
 import android.util.Log;
 import android.widget.Toast;
 
+import java.util.HashMap;
 import java.util.Properties;
 
 public class _UC implements IPayManager {
@@ -66,14 +75,16 @@ public class _UC implements IPayManager {
 
     private int mUid = 0;
 
-    private String mPassport = "";
+    private String mPassport;
 
-    private String mSessionid = "";
+    private String mSessionid;
 
     //测试环境
     private boolean mDebugMode = true;
 
     private boolean mLogined = false;
+
+    private ProgressDialog mProgressDialog;
 
     /**
      * @Title: _UC
@@ -149,7 +160,7 @@ public class _UC implements IPayManager {
                     // UCGameSDK.defaultSDK().setUIStyle(UCUIStyle.STANDARD);
                     //对于需要支持账户切换/退出账号的游戏，必须在此设置退出侦听器
                     UCGameSDK.defaultSDK().setLogoutNotifyListener(mLogoutNotify);
-                    UCGameSDK.defaultSDK().initSDK(mActivity, UCLogLevel.DEBUG, mDebugMode, gpi, mInitCallback);
+                    UCGameSDK.defaultSDK().initSDK(mActivity, UCLogLevel.ERROR, mDebugMode, gpi, mInitCallback);
                 } catch (UCCallbackListenerNullException e) {
                     e.printStackTrace();
                     mInitCallBack.initFaile(e.getLocalizedMessage());
@@ -188,6 +199,7 @@ public class _UC implements IPayManager {
     public void login(Activity activity, LoginCallBack loginCallBack) {
         this.mActivity = activity;
         this.mLoginCallBack = loginCallBack;
+        mLogined=false;
         try {
             UCGameSDK.defaultSDK().login(activity, loginCallbackListener);
         } catch (UCCallbackListenerNullException e) {
@@ -204,10 +216,7 @@ public class _UC implements IPayManager {
             Log.e("UCGameSDK", "UCGameSdk登录接口返回数据:code=" + code + ",msg=" + msg);
             // 登录成功。此时可以获取sid。并使用sid进行游戏的登录逻辑。
             // 客户端无法直接获取UCID
-
             if (code == UCGameSDKStatusCode.SUCCESS) {
-                // 获取sid。（注：ucid需要使用sid作为身份标识去SDK的服务器获取）
-                UCGameSDK.defaultSDK().getSid();
                 mLogined=true;
             }
 
@@ -216,17 +225,92 @@ public class _UC implements IPayManager {
                 // 没有初始化就进行登录调用，需要游戏调用SDK初始化方法
                 mLoginCallBack.loginFaile("SDK未初始化");
             }
-
             // 登录退出。该回调会在登录界面退出时执行。
             if (code == UCGameSDKStatusCode.LOGIN_EXIT) {
-
                 // 登录界面关闭，游戏需判断此时是否已登录成功进行相应操作
                 if(mLogined){
-                    mLoginCallBack.loginSuccess(null);
+                    HashMap<String, Object> params = new HashMap<String, Object>();
+                    Integer gameid = mInitBean.getGameid();
+                    String partner = mInitBean.getPartner();
+                    String referer = mInitBean.getReferer();
+                    long unixTime = DateUtil.getUnixTime();
+                    String deviceno=mInitBean.getDeviceNo();
+                    String signStr =deviceno+gameid+partner+referer+unixTime+mInitBean.getAppKey();
+                    String sign=MD5Util.getMd5toLowerCase(signStr);
+                    // 获取sid。（注：ucid需要使用sid作为身份标识去SDK的服务器获取）
+                    String sid = UCGameSDK.defaultSDK().getSid();
+                    
+                    params.put("deviceno", deviceno);
+                    params.put("gameid", gameid);
+                    params.put("partner",partner);
+                    params.put("referer", referer);
+                    params.put("time", unixTime);
+                    params.put("sign", sign);
+                    params.put("partner_sessionid", sid);
+                    params.put("partner_uid",  "");
+                    params.put("partner_token", "");
+                    params.put("partner_nickname", "");
+                    params.put("partner_username", "");
+                    params.put("partner_appid", mAppId);
+                    String hashMapTOgetParams = NetHttpUtil.hashMapTOgetParams(params, APIConstants.LOGIN_URL);
+                    System.out.println(hashMapTOgetParams);
+                    showProgressDialog(mActivity);
+                    NetHttpUtil.getDataFromServerPOST(mActivity,new RequestModel(APIConstants.LOGIN_URL, params, new LoginParser()),mLoginDataCallBack);
                 }else{
                     mLoginCallBack.backKey("登录退出");
                 }
             }
+        }
+
+    };
+
+
+    private DataCallback<JSONObject> mLoginDataCallBack = new DataCallback<JSONObject>() {
+
+        @Override
+        public void callbackSuccess(JSONObject paramObject) {
+            closeProgressDialog();
+            Log.d(TAG, "mLoginDataCallBack---------"+paramObject.toString());
+            try {
+                if (paramObject != null && paramObject.optInt("code") == 1) {
+                    JSONObject data = paramObject.optJSONObject("data");
+                    mUid = data.optInt("uid");
+                    mPassport = data.optString("passport");
+                    mSessionid = data.optString("sessionid");
+                    mUserModel=new UserAccount() {
+
+                        @Override
+                        public Integer getUserUid() {
+                            return mUid;
+
+                        }
+
+                        @Override
+                        public String getUserName() {
+                            return mPassport;
+
+                        }
+
+                        @Override
+                        public String getSession() {
+                            return mSessionid;
+
+                        }
+                    };
+                    mLoginCallBack.loginSuccess(mUserModel);
+
+                } else {
+                    mLoginCallBack.loginFaile(paramObject.optString("msg"));
+                }
+            } catch (Exception e) {
+                mLoginCallBack.loginFaile(e.getLocalizedMessage());
+            }
+        }
+
+        @Override
+        public void callbackError(String error) {
+            closeProgressDialog();
+            mLoginCallBack.loginFaile(error);
         }
 
     };
@@ -457,4 +541,43 @@ public class _UC implements IPayManager {
     public void onDestroy(Activity activity) {
         UCGameSDK.defaultSDK().destoryFloatButton(activity);
     }
+
+    /**
+     * @return void 返回类型
+     * @Title: showProgressDialog(设置进度条)
+     * @author xiaoming.yuan
+     * @data 2013-7-12 下午10:09:36
+     */
+    protected void showProgressDialog(Activity activity) {
+        if (! activity.isFinishing()) {
+            try {
+                this.mProgressDialog = new ProgressDialog(activity);// 实例化
+                // 设置ProgressDialog 的进度条style
+                this.mProgressDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);// 设置进度条风格，风格为圆形，旋转的
+                this.mProgressDialog.setTitle("登陆");
+                this.mProgressDialog.setMessage("加载中...");// 设置ProgressDialog 提示信息
+                // 设置ProgressDialog 的进度条是否不明确
+                this.mProgressDialog.setIndeterminate(false);
+                // 设置ProgressDialog 的进度条是否不明确
+                this.mProgressDialog.setCancelable(false);
+                this.mProgressDialog.setCanceledOnTouchOutside(false);
+                this.mProgressDialog.show();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+        }
+    }
+
+    /**
+     * @return void 返回类型
+     * @Title: closeProgressDialog(关闭进度条)
+     * @author xiaoming.yuan
+     * @data 2013-7-12 下午10:09:30
+     */
+    protected void closeProgressDialog() {
+        if (this.mProgressDialog != null && this.mProgressDialog.isShowing())
+            this.mProgressDialog.dismiss();
+    }
+
 }
