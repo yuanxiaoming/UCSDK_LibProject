@@ -1,7 +1,4 @@
 package com.android.splus.sdk._uc;
-
-
-
 import cn.uc.gamesdk.UCCallbackListener;
 import cn.uc.gamesdk.UCCallbackListenerNullException;
 import cn.uc.gamesdk.UCFloatButtonCreateException;
@@ -15,18 +12,18 @@ import cn.uc.gamesdk.info.GameParamInfo;
 import cn.uc.gamesdk.info.OrderInfo;
 import cn.uc.gamesdk.info.PaymentInfo;
 
+import com.android.splus.sdk.apiinterface.APIConstants;
+import com.android.splus.sdk.apiinterface.DateUtil;
 import com.android.splus.sdk.apiinterface.IPayManager;
 import com.android.splus.sdk.apiinterface.InitBean;
 import com.android.splus.sdk.apiinterface.InitBean.InitBeanSuccess;
-import com.android.splus.sdk.apiinterface.NetHttpUtil.DataCallback;
-import com.android.splus.sdk.apiinterface.APIConstants;
-import com.android.splus.sdk.apiinterface.DateUtil;
 import com.android.splus.sdk.apiinterface.InitCallBack;
 import com.android.splus.sdk.apiinterface.LoginCallBack;
 import com.android.splus.sdk.apiinterface.LoginParser;
 import com.android.splus.sdk.apiinterface.LogoutCallBack;
 import com.android.splus.sdk.apiinterface.MD5Util;
 import com.android.splus.sdk.apiinterface.NetHttpUtil;
+import com.android.splus.sdk.apiinterface.NetHttpUtil.DataCallback;
 import com.android.splus.sdk.apiinterface.RechargeCallBack;
 import com.android.splus.sdk.apiinterface.RequestModel;
 import com.android.splus.sdk.apiinterface.UserAccount;
@@ -54,8 +51,6 @@ public class _UC implements IPayManager {
     private String mAppId;
 
     private String mGameId;
-
-    private String mServerId;
 
     private InitBean mInitBean;
 
@@ -85,6 +80,14 @@ public class _UC implements IPayManager {
     private boolean mLogined = false;
 
     private ProgressDialog mProgressDialog;
+
+    private float mMoney ;
+
+    private String mPayway="_DCN" ;
+    private Integer mServerId;
+    private Integer mRoleId;
+    private String mRoleName;
+    private String mPext;
 
     /**
      * @Title: _UC
@@ -127,17 +130,17 @@ public class _UC implements IPayManager {
 
             @Override
             public void initBeaned(boolean initBeanSuccess) {
-
+                String uc_serverId = "0";
                 if (mProperties != null) {
                     mAppId = mProperties.getProperty("uc_appid") == null ? "0" : mProperties.getProperty("91_appid");
                     mGameId = mProperties.getProperty("uc_gameId") == null ? "0" : mProperties.getProperty("uc_gameId");
-                    mServerId = mProperties.getProperty("uc_serverId") == null ? "0" : mProperties.getProperty("uc_serverId");
+                    uc_serverId = mProperties.getProperty("uc_serverId") == null ? "0" : mProperties.getProperty("uc_serverId");
                 }
                 try {
                     GameParamInfo gpi = new GameParamInfo();// 下面的值仅供参考
                     gpi.setCpId(Integer.valueOf(mAppId));
                     gpi.setGameId(Integer.valueOf(mGameId));
-                    gpi.setServerId(Integer.valueOf(mServerId));
+                    gpi.setServerId(Integer.valueOf(uc_serverId));
                     // gpi.setChannelId(2); // 渠道号统一处理，已不需设置，此参数已废弃，服务端此参数请设置值为2
 
                     // 在九游社区设置显示查询充值历史和显示切换账号按钮，
@@ -239,7 +242,7 @@ public class _UC implements IPayManager {
                     String sign=MD5Util.getMd5toLowerCase(signStr);
                     // 获取sid。（注：ucid需要使用sid作为身份标识去SDK的服务器获取）
                     String sid = UCGameSDK.defaultSDK().getSid();
-                    
+
                     params.put("deviceno", deviceno);
                     params.put("gameid", gameid);
                     params.put("partner",partner);
@@ -325,31 +328,91 @@ public class _UC implements IPayManager {
         this.mActivity=activity;
         this.mRechargeCallBack=rechargeCallBack;
 
-        PaymentInfo pInfo = new PaymentInfo(); //创建Payment对象，用于传递充值信息
-        //设置成功提交订单后是否允许用户连续充值，默认为true。
-        pInfo.setAllowContinuousPay(false);
-        //设置 充值自定义参数，此参数不作任何处理，在充值完成后通知游戏服务器充值结果时原封不动传给游戏服务器。此参数为可选参数，默认为空。
-        pInfo.setCustomInfo("custOrderId=PX299392#ip=139.91.192.29#...");
-        //设置充值的游戏服务器ID，此为可选参数，默认是0，不设置或设置为0 时，会使用初始化时设置的服务器ID。必须使用正确的ID值（UC分配的serverId）才可以打开支付页面。如使用正确ID仍无法打开时，请在开放平台检查是否已经配置了对应环境 对应ID的回调地址，如无请配置，如有但仍无法支付请联系UC技术接口人。
-        pInfo.setServerId(123);
-        //设置用户的游戏角色的ID，此为可选参数
-        pInfo.setRoleId("102");
-        //设置用户的游戏角色名字，此为可选参数
-        pInfo.setRoleName("游戏角色名");
-        //设置用户的游戏角色等级，此为可选参数
-        pInfo.setGrade("12");
-        //设置允许充值的金额，此为可选参数，默认为0。如果设置了此金额不为0，则表示只允许用户按指定金额充值；如果不指定金额或指定为0，则表示用户在充值时可以自由选择或输入希望充入的金额。
-        pInfo.setAmount(100.0f);
-        // 设置CP自有的订单号，此为可选参数
-        pInfo.setTransactionNumCP("XXXXXX");
-        try {
-            UCGameSDK.defaultSDK().pay(activity, pInfo,mUCPayCallbackListener);
-        } catch (UCCallbackListenerNullException e) {
-            //异常处理
-            rechargeCallBack.rechargeFaile(e.getLocalizedMessage());
-        }
+        this.mServerId=serverId;
+        this.mRoleId=roleId;
+        this.mRoleName=roleName;
+        this.mPext=pext;
+
+        HashMap<String, Object> params = new HashMap<String, Object>();
+        Integer gameid = mInitBean.getGameid();
+        String partner = mInitBean.getPartner();
+        String referer = mInitBean.getReferer();
+        long unixTime = DateUtil.getUnixTime();
+        String deviceno=mInitBean.getDeviceNo();
+        String signStr =gameid+serverName+deviceno+referer+partner+mUid+mMoney+mPayway+unixTime+mInitBean.getAppKey();
+        String sign=MD5Util.getMd5toLowerCase(signStr);
+
+        params.put("deviceno", deviceno);
+        params.put("gameid", gameid);
+        params.put("partner",partner);
+        params.put("referer", referer);
+        params.put("time", unixTime);
+        params.put("sign", sign);
+        params.put("uid",mUid);
+        params.put("passport",mPassport);
+        params.put("serverId",serverId);
+        params.put("serverName",serverName);
+        params.put("roleId",roleId);
+        params.put("roleName",roleName);
+        params.put("money",mMoney);
+        params.put("pext",pext);
+        params.put("money",money);
+        params.put("payway",mPayway);
+        params.put("outOrderid",outOrderid);
+        String hashMapTOgetParams = NetHttpUtil.hashMapTOgetParams(params, APIConstants.PAY_URL);
+        System.out.println(hashMapTOgetParams);
+        NetHttpUtil.getDataFromServerPOST(activity, new RequestModel(APIConstants.PAY_URL, params,new LoginParser()),mRechargeDataCallBack);
 
     }
+
+    private DataCallback<JSONObject> mRechargeDataCallBack = new DataCallback<JSONObject>() {
+
+        @Override
+        public void callbackSuccess(JSONObject paramObject) {
+            Log.d(TAG, "mRechargeDataCallBack---------"+paramObject.toString());
+
+            if (paramObject != null && (paramObject.optInt("code") == 1||paramObject.optInt("code") == 24)) {
+                JSONObject data = paramObject.optJSONObject("data");
+                String orderid=data.optString("orderid");
+                PaymentInfo pInfo = new PaymentInfo(); //创建Payment对象，用于传递充值信息
+                //设置成功提交订单后是否允许用户连续充值，默认为true。
+                pInfo.setAllowContinuousPay(false);
+                //设置 充值自定义参数，此参数不作任何处理，在充值完成后通知游戏服务器充值结果时原封不动传给游戏服务器。此参数为可选参数，默认为空。
+                pInfo.setCustomInfo(mPext);
+                //设置充值的游戏服务器ID，此为可选参数，默认是0，不设置或设置为0 时，会使用初始化时设置的服务器ID。必须使用正确的ID值（UC分配的serverId）才可以打开支付页面。如使用正确ID仍无法打开时，请在开放平台检查是否已经配置了对应环境 对应ID的回调地址，如无请配置，如有但仍无法支付请联系UC技术接口人。
+                pInfo.setServerId(mServerId);
+                //设置用户的游戏角色的ID，此为可选参数
+                pInfo.setRoleId(String.valueOf(mRoleId));
+                //设置用户的游戏角色名字，此为可选参数
+                pInfo.setRoleName(mRoleName);
+                //设置用户的游戏角色等级，此为可选参数
+                //  pInfo.setGrade("12");
+                //设置允许充值的金额，此为可选参数，默认为0。如果设置了此金额不为0，则表示只允许用户按指定金额充值；如果不指定金额或指定为0，则表示用户在充值时可以自由选择或输入希望充入的金额。
+                pInfo.setAmount(mMoney);
+                // 设置CP自有的订单号，此为可选参数
+                pInfo.setTransactionNumCP(orderid);
+                try {
+                    UCGameSDK.defaultSDK().pay(mActivity, pInfo,mUCPayCallbackListener);
+                } catch (UCCallbackListenerNullException e) {
+                    //异常处理
+                    mRechargeCallBack.rechargeFaile(e.getLocalizedMessage());
+                }
+
+            }else {
+                Log.d(TAG, paramObject.optString("msg"));
+                mRechargeCallBack.rechargeFaile(paramObject.optString("msg"));
+            }
+
+        }
+
+        @Override
+        public void callbackError(String error) {
+            Log.d(TAG, error);
+            mRechargeCallBack.rechargeFaile(error);
+
+        }
+
+    };
 
     UCCallbackListener<OrderInfo> mUCPayCallbackListener= new UCCallbackListener<OrderInfo>(){
 
@@ -357,18 +420,21 @@ public class _UC implements IPayManager {
         public void callback(int statudcode, OrderInfo orderInfo) {
             if (statudcode == UCGameSDKStatusCode.NO_INIT) {
                 //没有初始化就进行登录调用，需要游戏调用SDK初始化方法
+                Toast.makeText(mActivity, "请您先登录", Toast.LENGTH_LONG).show();
             }
             if (statudcode == UCGameSDKStatusCode.SUCCESS){
                 //成功充值
-                if (orderInfo != null) {
-                    String ordered = orderInfo.getOrderId();//获取订单号
-                    float amount = orderInfo.getOrderAmount();//获取订单金 额
-                    int payWay = orderInfo.getPayWay();//获取充值类型，具体 可参考支付通道编码列表
-                    String payWayName = orderInfo.getPayWayName();//充值类 型的中文名称
-                }
+                mRechargeCallBack.rechargeSuccess(mUserModel);
+                //                if (orderInfo != null) {
+                //                    String ordered = orderInfo.getOrderId();//获取订单号
+                //                    float amount = orderInfo.getOrderAmount();//获取订单金 额
+                //                    int payWay = orderInfo.getPayWay();//获取充值类型，具体 可参考支付通道编码列表
+                //                    String payWayName = orderInfo.getPayWayName();//充值类 型的中文名称
+                //                }
             }
             if (statudcode == UCGameSDKStatusCode.PAY_USER_EXIT) {
                 //用户退出充值界面。
+                mRechargeCallBack.backKey("退出充值界面");
             }
 
         }
