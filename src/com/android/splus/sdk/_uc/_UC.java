@@ -332,6 +332,7 @@ public class _UC implements IPayManager {
         this.mRoleId=roleId;
         this.mRoleName=roleName;
         this.mPext=pext;
+        this.mMoney=money;
 
         HashMap<String, Object> params = new HashMap<String, Object>();
         Integer gameid = mInitBean.getGameid();
@@ -356,7 +357,6 @@ public class _UC implements IPayManager {
         params.put("roleName",roleName);
         params.put("money",mMoney);
         params.put("pext",pext);
-        params.put("money",money);
         params.put("payway",mPayway);
         params.put("outOrderid",outOrderid);
         String hashMapTOgetParams = NetHttpUtil.hashMapTOgetParams(params, APIConstants.PAY_URL);
